@@ -1,25 +1,33 @@
 # Projet TreeBasedNetworks
 
-Bienvenue dans le projet TreeBasedNetworks ! Ce dépôt contient du code et des exemples liés aux modèles basés sur les arbres.
+Bienvenue dans le projet TreeBasedNetworks ! Ce dépôt contient du code et des exemples liés aux modèles basés sur les arbres. Notre objectif est de fournir une plateforme où vous pouvez explorer et expérimenter avec différentes techniques de construction et d'optimisation de réseaux phylogénétiques à partir d'arbres
 
 ## Pour commencer
 
 Pour commencer avec le projet, suivez ces étapes :
-1. Clonez le dépôt.
+1. Clonez le dépôt. git clone `https://github.com/Chaker-Hassen/TreeBasedNetworks.git`
 2. Installez les dépendances nécessaires.
-3. Explorez les exemples dans le répertoire `examples`.
+3. Explorez les exemples dans le répertoire `examples` pour comprendre comment utiliser les fonctionnalités du projet.
 
-Lancez des versions exécutables de ces notebooks à l'aide de Google Colab
+Vous pouvez également exécuter les exemples directement en utilisant Google Colab.
 
-# Dépendances
+## Dépendances
 * [NetworkX](https://networkx.github.io/)
 * [Matplotlib](https://matplotlib.org/)
 * [AsymmeTree](https://github.com/david-schaller/AsymmeTree)
   
+## Fichiers
+* Données :
+  * `output_algo2.pkl` : Fichier de sortie contenant le graphe résultant de l'algorithme 2.
+  * `test1_small_matrix.pkl` : Fichier d'entrée contenant une petite matrice de test.
+  * `test1_species_tree.pkl` : Fichier d'entrée contenant un arbre phylogénétique de test.
+* Code source :
+  * `treebasednetworks.py` : Le fichier de code source principal contenant les classes et fonctions du projet.
+
 ## Fonctionnalités
+Notre projet offre plusieurs fonctionnalités pour construire, optimiser et analyser les réseaux phylogénétiques. Vous pouvez explorer différentes méthodes et algorithmes à travers nos exemples illustratifs.
 
-
-# Exemples
+## Exemples
 Consultez le répertoire examples pour des démonstrations détaillées de la manière d'utiliser nos modèles dans différents scénarios:
 1. **Scénario 1 - Construction d'un Tree-Based Network avec l'algorithme 2 :**
    - Fichier : `Tree_specific_Algorithme_2.py`
@@ -40,5 +48,5 @@ Consultez le répertoire examples pour des démonstrations détaillées de la ma
    - Fichier : `Heurostique.py`
    - Description : Ce fichier présente deux méthodes heuristiques pour traiter les transferts dans le réseau. La première méthode trie les transferts selon le timestamp, et la deuxième méthode effectue 10 itérations de transferts aléatoires pour atteindre la meilleur resultat possible. Ces méthodes illustrent diverses approches pour optimiser le réseau en éliminant les transferts superflus tout en préservant son caractère de Réseau Phylogénétique (PTN).
 
-# Statut du projet
+## Statut du projet
 En développement actif.
