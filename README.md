@@ -17,11 +17,11 @@ Vous pouvez également exécuter les exemples directement en utilisant Google Co
 * [AsymmeTree](https://github.com/david-schaller/AsymmeTree)
   
 ## Fichiers
-* Données :
+* data :
   * `output_algo2.pkl` : Fichier de sortie contenant le graphe résultant de l'algorithme 2.
   * `test1_small_matrix.pkl` : Fichier d'entrée contenant une petite matrice de test.
   * `test1_species_tree.pkl` : Fichier d'entrée contenant un arbre phylogénétique de test.
-* Code source :
+* src :
   * `treebasednetworks.py` : Le fichier de code source principal contenant les classes et fonctions du projet.
 
 ## Fonctionnalités
