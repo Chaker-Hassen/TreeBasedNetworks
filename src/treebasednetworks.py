@@ -20,7 +20,7 @@ class TransferManager:
     def __init__(self):
         pass
 
-    def add_transfer_to_tree(self, G, pw, w, pay, ay, c, attributes):
+    def add_transfer_to_tree(self, G, pw, w, pay, ay, c, max_node_value):
 
         """
             Ajoute un transfert au graphe G.
@@ -53,8 +53,9 @@ class TransferManager:
         G.remove_edge(pay, ay)
 
         # Ajout des nouveaux nœuds pour représenter le transfert
-        new_node_1 = max(G.nodes()) + 1
-        new_node_2 = max(G.nodes()) + 2
+        new_node_1 = max_node_value + 1
+        new_node_2 = max_node_value + 2
+        max_node_value = max_node_value + 2
 
         G.add_edge(pw, new_node_1, type='support', color='black')
         G.add_edge(new_node_1, w, type='support', color='black')
@@ -62,7 +63,7 @@ class TransferManager:
         G.add_edge(new_node_2, ay, type='support', color='black')
 
 
-        # Ajout d'une arête entre ces deux nouveaux nœuds
+        # Ajout d'une arête 'transfer' entre ces deux nouveaux nœuds
         G.add_edge(new_node_1, new_node_2)
         G.nodes[new_node_1]['type']='network'
         G.nodes[new_node_2]['type']='network'
@@ -87,31 +88,13 @@ class TransferManager:
         G.nodes[new_node_2]['timestamp']=mean_timestamp
 
 
-
-        # Ajout du numéro des nouveaux nœuds comme attribut
-        G.nodes[new_node_1]["number"] = max(nx.get_node_attributes(G, "number").values()) + 1
-        G.nodes[new_node_2]["number"] = max(nx.get_node_attributes(G, "number").values()) + 1
-
-        # Étiquetage des nouveaux nœuds:
-
-        #l( ˆ w) = (l(w) ∩ l(w′)
-        Characters_new_node_1 = [a & b for a, b in zip(attributes[G.nodes[w]["number"]]['Characters'], attributes[G.nodes[pw]["number"]]['Characters'])]
-        # (l(ˆ ai+1) = l(a′ i+1) ∩ l(ai+1))
-        Characters_new_node_2 = [a & b for a, b in zip(attributes[G.nodes[ay]["number"]]['Characters'], attributes[G.nodes[pay]["number"]]['Characters'])]
-
-        # Ajout des nouvelles étiquettes de caractères aux nœuds nouvellement créés
-        attributes[G.nodes[new_node_1]["number"]] = {'Characters': Characters_new_node_1, 'spece': None}
-        attributes[G.nodes[new_node_2]["number"]] = {'Characters': Characters_new_node_2, 'spece': None}
-
-        # Ajout du caractère c aux étiquettes de caractères des nouveaux nœuds
-        # l( ˆ w) = (l(w) ∩ l(w′)) ∪ {c}  et  (l(ˆ ai+1) = l(a′ i+1) ∩ l(ai+1)) ∪ {c}
-        c_list = [1 if i == c else 0 for i in range(len(attributes[G.nodes[pw]["number"]]['Characters']))]
-        print(c_list)
-        attributes[G.nodes[new_node_1]["number"]]['Characters'] = [a | b for a, b in zip(attributes[G.nodes[new_node_1]["number"]]['Characters'], c_list)]
-        attributes[G.nodes[new_node_2]["number"]]['Characters'] = [a | b for a, b in zip(attributes[G.nodes[new_node_2]["number"]]['Characters'], c_list)]
+        # Ajout du numéro aux nouveaux nœuds
+        max_number = max(nx.get_node_attributes(G, "number").values())
+        G.nodes[new_node_1]["number"] = max_number + 1
+        G.nodes[new_node_2]["number"] = max_number + 2
 
 
-        return G
+        return G, new_node_1, new_node_2, max_node_value
 
 
 
@@ -121,7 +104,7 @@ class TransferManager:
             Extrait l'arbre BFS du graphe G à partir du nœud 'ai', en supprimant toutes les arêtes de transfert du BFS.
 
             Cette fonction calcule l'arbre BFS du graphe G à partir du nœud 'ai', puis supprime toutes les arêtes de transfert
-            du BFS obtenu. Elle renvoie ensuite les nœuds de cet arbre BFS sans les nœuds connectés à des arêtes de transfert.
+            du BFS obtenu. Elle renvoie ensuite les nœuds de cet arbre BFS.
 
             Args:
                 G (networkx.DiGraph): Le graphe NetworkX contenant les nœuds et les arêtes.
@@ -131,15 +114,13 @@ class TransferManager:
                 list: Une liste de nœuds représentant l'arbre BFS sans les nœuds connectés à des arêtes de transfert.
         """
 
+        # Supprimer les arêtes de type 'transfer'
+        transfer_edges = [(u, v) for u, v, data in G.edges(data=True) if data.get('type') == 'transfer']
+        Gs=G.copy()
+        Gs.remove_edges_from(transfer_edges) # Gs : c'est notre reseau sans des aretes de type "transfer"
+
         # Obtenir l'arbre BFS à partir du nœud ai
-        bfs_tree = nx.bfs_tree(G, ai)
-
-        # Supprimer les arêtes de type 'transfer' de bfs_tree
-        edges_to_remove = [(u, v) for u, v in bfs_tree.edges() if G.edges[u, v]['type'] == 'transfer']
-        bfs_tree.remove_edges_from(edges_to_remove)
-
-        # Obtenir l'arbre BFS à partir du nœud ai => la partie qui reste connectée à la racine ai
-        bfs_tree_ai = nx.bfs_tree(bfs_tree, ai)
+        bfs_tree_ai = nx.bfs_tree(Gs, ai)
 
         # Récupérer les nœuds dans l'ordre du parcours en largeur (BFS)
         bfs_nodes = list(bfs_tree_ai.nodes())
@@ -147,6 +128,72 @@ class TransferManager:
         return bfs_nodes
 
 
+    def Network_to_Tree(self, G):
+      """
+        Crée un sous-graphe sans les arêtes de type 'transfer' à partir d'un graphe donné.
+
+        Cette fonction prend en entrée un graphe dirigé G, identifie les arêtes qui ont l'attribut 'type' égal à 'transfer',
+        puis crée un sous-graphe Gs en supprimant ces arêtes de transfert. Le sous-graphe résultant ne contiendra que les
+        nœuds et les arêtes qui ne sont pas de type 'transfer'.
+
+        Args:
+            G (networkx.DiGraph): Le graphe NetworkX contenant les nœuds et les arêtes.
+
+        Returns:
+            networkx.DiGraph: Le sous-graphe Gs ne contenant pas les arêtes de type 'transfer'.
+      """
+      transfer_edges = [(u, v) for u, v, data in G.edges(data=True) if data.get('type') == 'transfer']
+      Gs=G.copy()
+      Gs.remove_edges_from(transfer_edges) # Gs : c'est notre reseau sans des aretes de type "transfer"
+
+      return Gs
+
+    def extract_reachable_leaves_graph(self, G):
+      """
+      Cette fonction élimine les arêtes 'transfer' du graphe G et génère un sous-graphe qui inclut uniquement les feuilles accessibles
+       depuis les nœuds sources et cibles des transferts, où chaque nœud représente une espèce et chaque arête représente un événement de transfert.
+
+      Args:
+          G (networkx.DiGraph): Le graphe NetworkX contenant les nœuds et les arêtes.
+
+      Returns:
+          Tuple[networkx.DiGraph, networkx.DiGraph]: Le graphe G avec les arêtes de type "transfer" supprimées.
+                                                     le nouveau graphe Tr contenant les feuilles atteignables
+      """
+
+      transfer_manager = TransferManager()
+      Gs=transfer_manager.Network_to_Tree(G)
+
+      # Créer un nouveau graphe Tr pour stocker les arêtes des feuilles atteignables
+      Tr = nx.DiGraph()
+
+      transfer_edges = [(u, v) for u, v, data in G.edges(data=True) if data.get('type') == 'transfer']
+
+      for u, v in transfer_edges:
+          # Parcours  pour trouver les feuilles atteignables à partir du nœud de départ (u)
+          print(u)
+          reachable_leaves_u = [node for node in nx.descendants(Gs, u) if Gs.out_degree(node) == 0]
+
+          # Parcours pour trouver les feuilles atteignables à partir du nœud d'arrivée (v)
+          print(v)
+          reachable_leaves_v = [node for node in nx.descendants(Gs, v) if Gs.out_degree(node) == 0]
+
+          # Ajouter des nœuds avec attributs au graphe Tr
+          for leaf_u in reachable_leaves_u:
+              Tr.add_node(leaf_u, **Gs.nodes[leaf_u])
+          for leaf_v in reachable_leaves_v:
+              Tr.add_node(leaf_v, **Gs.nodes[leaf_v])
+          # Ajouter des arêtes au graphe Tr avec les caractéristiques nécessaires
+          for leaf_u in reachable_leaves_u:
+              for leaf_v in reachable_leaves_v:
+                  Tr.add_edge(leaf_u, leaf_v, character=G.edges[u, v]['character'],color='red')
+
+
+          print(f"Transfert ({G.nodes[u]['number']}, {G.nodes[v]['number']}) ajouter caractere N°: {G.edges[u,v]['character']}:")
+          print(f"  Feuilles atteignables par le nœud de départ {G.nodes[u]['number']} : ", {G.nodes[node]['number'] for node in set(reachable_leaves_u)})
+          print(f"  Feuilles atteignables par le nœud d'arrivée {G.nodes[v]['number']} : ",  {G.nodes[node]['number'] for node in set(reachable_leaves_v)})
+
+      return G, Tr
 
 
     def add_transfers_to_tree_PTN(self, G):
@@ -156,9 +203,9 @@ class TransferManager:
             Cette fonction effectue un nombre aléatoire d'itérations pour ajouter aléatoirement des branches du type transfert
             au graphe G en supprimant certaines arêtes existantes et en ajoutant de nouveaux nœuds et arêtes.
             Les nouvelles branches sont choisies de manière à ce qu'elles ne créent pas de relation de descendance
-            entre les nœuds nouvellement ajoutés et en respectant les conditions concernant les timestamps des nouveaux nœuds :
-            Premièrement, garantit que les nouveaux nœuds ont des périodes temporelles cohérentes avec ceux dont ils sont issus.
-            Deuxièmement, l'absence de redondances temporelles.
+            entre les nœuds nouvellement ajoutés et en respectant les conditions concernant les timestamps des nouveaux nœuds
+            garantit que les nouveaux nœuds ont des périodes temporelles cohérentes avec ceux dont ils sont issus.
+
 
             Args:
                 G (networkx.DiGraph): Le graphe NetworkX.
@@ -167,117 +214,52 @@ class TransferManager:
                 networkx.DiGraph: Le graphe G avec les ajouts aléatoires de branches.
         """
 
-        # Répéter un nombre aléatoire de fois entre 1 et 4
-        num_iterations = random.randint(1, 4)
+        # Déterminer le maximum de G.nodes()
+        max_node_value = max(G.nodes())
 
-        # Ensemble pour stocker les timestamps : chaque élément ne peut apparaître qu'une seule fois.Si un élément déjà présent dans l'ensemble est ajouté à nouveau, il ne sera pas inclus une seconde fois.
-        timestamps = set(node_data['timestamp'] for _, node_data in G.nodes(data=True))
-
+        # Répéter un nombre aléatoire de fois entre 2 et 5
+        num_iterations = random.randint(2, 5)
 
         for _ in range(num_iterations):
-            # Variables pour garder une trace des nœuds ajoutés
-            new_node_1 = None
-            new_node_2 = None
+            # 1) Choix aléatoire un seul arête "support" existante e
+            edges = [edge for edge in G.edges() if G[edge[0]][edge[1]]['type'] == 'support']
+            random_edge_1 = random.choice(edges)
+            node_1, node_2 = random_edge_1
 
-            # Variable pour indiquer si les nœuds ajoutés sont valides
-            found = False
+            # 2) faire la liste L de toutes les arêtes où e peut transférer (i.e. intersection de temps non-vides + Les nouvelles branches ne créent pas de relation de descendance )
+            L = set()
+              # Supprimez l'arête déjà choisie de la liste des arêtes
+            edges.remove(random_edge_1)
+            for edge in edges:
+              node_3, node_4 = edge
 
-            # Répéter jusqu'à ce que les nœuds ajoutés ne soient pas en relation de descendance l'un de l'autre et respectent les conditions relatives aux timestamps.
-            while not found:
-                # Choix aléatoire de deux arêtes existantes
-                edges = [edge for edge in G.edges() if G[edge[0]][edge[1]]['type'] == 'support']
-                random_edge_1, random_edge_2 = random.sample(edges, 2)
+              # Vérifier s'il y a une intersection de temps non-vides
+              timestamp_manager = TimestampManager()
+              if timestamp_manager.check_intersection(G.nodes[node_1]['timestamp'], G.nodes[node_2]['timestamp'],
+                                                      G.nodes[node_3]['timestamp'], G.nodes[node_4]['timestamp']) :
+                  # Vérification si node_1 et node_3 ne sont pas des descendants,	Rq: tant que node 1 et node 3 ne sont pas descendant donc new_node_1 et new_node_2 ne devraient pas être des descendants non plus
+                  descendants_1 = nx.descendants(G, node_1)
+                  descendants_1.add(node_1)
+                  descendants_3 = nx.descendants(G, node_3)
+                  descendants_3.add(node_3)
+                  if (node_1 not in descendants_3 and node_3 not in descendants_1) :
+                      L.add(edge)
+            # Si aucune arête de transfert valide n'est trouvée, passez à l'itération suivante.
+            if not L:
+                continue
 
-                node_1, node_2 = random_edge_1
-                node_3, node_4 = random_edge_2
+            # 3) choisir une arête e' au hasard parmi L
+            random_edge_2 = random.choice(list(L))
+            node_3, node_4 = random_edge_2
 
-                # Variables pour garder une trace des anciens nœuds
-                number_node_1= G.nodes[node_1]['number']
-                number_node_2= G.nodes[node_2]['number']
-                number_node_3= G.nodes[node_3]['number']
-                number_node_4= G.nodes[node_4]['number']
-
-                timeStamp_node_1= G.nodes[node_1]['timestamp']
-                timeStamp_node_2= G.nodes[node_2]['timestamp']
-                timeStamp_node_3= G.nodes[node_3]['timestamp']
-                timeStamp_node_4= G.nodes[node_4]['timestamp']
-
-                # Suppression des arêtes choisies
-                G.remove_edge(node_1, node_2)
-                G.remove_edge(node_3, node_4)
-
-                # Ajout des nouveaux nœuds et des arêtes
-                new_node_1 = max(G.nodes()) + 1
-                new_node_2 = max(G.nodes()) + 2
-
-                G.add_edge(node_1, new_node_1, type='support', color='black')
-                G.add_edge(new_node_1, node_2, type='support', color='black')
-                G.add_edge(node_3, new_node_2, type='support', color='black')
-                G.add_edge(new_node_2, node_4, type='support', color='black')
-
-                G.nodes[new_node_1]['type']='network'
-                G.nodes[new_node_2]['type']='network'
-
-                # Calcul du mean_timestamp
-                timestamp_manager = TimestampManager()
-                mean_timestamp = timestamp_manager.calculate_mean_timestamp(G, node_1, node_2, node_3, node_4)
-
-                # Vérification si aucun nœud n'est un descendant de l'autre
-                descendants_1 = nx.descendants(G, new_node_1)
-                descendants_2 = nx.descendants(G, new_node_2)
-
-
-                if (new_node_1 not in descendants_2 and new_node_2 not in descendants_1)and \
-                      timestamp_manager.check_intersection(G.nodes[node_1]['timestamp'], G.nodes[node_2]['timestamp'],
-                                          G.nodes[node_3]['timestamp'], G.nodes[node_4]['timestamp'])and \
-                      mean_timestamp not in timestamps:
-                    # Ajout d'une arête entre les deux nouveaux nœuds
-                    G.add_edge(new_node_1, new_node_2, type='transfer', color='red')
-                    # Ajout de l'attribut "type" à la nouvelle arête
-                    G[new_node_1][new_node_2]['type'] = 'transfer'
-                    G[new_node_1][new_node_2]['color'] = 'red'
-
-                    # Mise à jour des timestamps des nouveaux nœuds
-                    G.nodes[new_node_1]['timestamp']=mean_timestamp
-                    G.nodes[new_node_2]['timestamp']=mean_timestamp
-
-                    # Ajout du mean_timestamp à l'ensemble des timestamps
-                    timestamps.add(mean_timestamp)
-                    # Ajout du numéro des nouveaux nœuds comme attribut
-                    max_number = max(nx.get_node_attributes(G, "number").values())
-                    G.nodes[new_node_1]["number"] = max_number + 1
-                    G.nodes[new_node_2]["number"] = max_number + 2
-
-                    # Si les conditions pour ajouter les nœuds sont vérifiées
-                    found = True
-                else:
-                    # Suppression des nouveaux nœuds ajoutés et restauration des anciens nœuds et arêtes à leur emplacement initial.
-                    G.remove_node(new_node_1)
-                    G.remove_node(new_node_2)
-                    G.add_edge(node_1, node_2, type='support', color='black')
-                    G.add_edge(node_3, node_4, type='support', color='black')
-                    G.nodes[node_1]['number']=number_node_1
-                    G.nodes[node_2]['number']=number_node_2
-                    G.nodes[node_3]['number']=number_node_3
-                    G.nodes[node_4]['number']=number_node_4
-
-                    G.nodes[node_1]['timestamp']=timeStamp_node_1
-                    G.nodes[node_2]['timestamp']=timeStamp_node_2
-                    G.nodes[node_3]['timestamp']=timeStamp_node_3
-                    G.nodes[node_4]['timestamp']=timeStamp_node_4
-
-
-        # Affichage
-        plt.title("Arbre depuis le format Newick avec modification des arêtes")
-        tree_builder = TreeBuilder()
-        tree_builder.drawGraph(G)
+            # 4) appeler add_transfer_to_tree en passant e et e'
+            transfer_manager = TransferManager()
+            G, new_node_1, new_node_2, max_node_value =transfer_manager.add_transfer_to_tree(G, node_1, node_2, node_3, node_4, -2, max_node_value)
 
         return G
 
 
-
     def add_transfers_to_tree_Non_PTN(self, G, x, y):
-
         """
             Ajoute des transferts aléatoires entre les branches d'un graphe d'arbre G
             tout en respectant certaines conditions pour obtenir un graphe non PTN.
@@ -289,169 +271,63 @@ class TransferManager:
             Returns:
                 networkx.Graph: Le graphe d'arbre avec les transferts ajoutés.
         """
+        # Déterminer le maximum de G.nodes()
+        max_node_value = max(G.nodes())
+
         # Répéter un nombre aléatoire de fois
-        num_iterations = random.randint(1, 4)
-
-        # Ensemble pour stocker les timestamps : chaque élément ne peut apparaître qu'une seule fois.Si un élément déjà présent dans l'ensemble est ajouté à nouveau, il ne sera pas inclus une seconde fois.
-        timestamps = set(node_data['timestamp'] for _, node_data in G.nodes(data=True))
-
-
+        num_iterations = random.randint(5, 7)
 
         for _ in range(num_iterations):
-            # Variables pour garder une trace des nœuds ajoutés
-            new_node_1 = None
-            new_node_2 = None
 
-            # Variable pour indiquer si les nœuds ajoutés sont valides
-            found = False
-            # Répéter jusqu'à ce que les nœuds ajoutés ne soient pas en relation de descendance l'un de l'autre et respectent les conditions relatives aux timestamps.
-            while not found:
+            # Choix aléatoire une seule arête "support" existante "e" dans le graphe G
+            edges = [edge for edge in G.edges() if G[edge[0]][edge[1]]['type'] == 'support']
+            random_edge_1 = random.choice(edges)
+            node_1, node_2 = random_edge_1
 
-                # Choix aléatoire de deux arêtes existantes avec type='support'
-                edges = [edge for edge in G.edges() if G[edge[0]][edge[1]]['type'] == 'support']
-                random_edge_1 = random.choice(edges)
-                edges.remove(random_edge_1)  # Retirer la première arête sélectionnée de la liste
-                random_edge_2 = random.choice(edges)
+            # 2) faire la liste L de toutes les arêtes où e peut transférer
+            #(i.e. intersection de temps non-vides + Les nouvelles branches ne créent pas de relation de descendance + Éviter les descendants croisés entre new_node_1 et new_node_2 avec px et py, et vice versa.)
+            L = set()
+            edges.remove(random_edge_1)  # Supprimez l'arête déjà choisie de la liste des arêtes
+            for edge in edges:
+              node_3, node_4 = edge
+              # Vérifier s'il y a une intersection de temps non-vides
+              timestamp_manager = TimestampManager()
+              if timestamp_manager.check_intersection(G.nodes[node_1]['timestamp'], G.nodes[node_2]['timestamp'],
+                                                      G.nodes[node_3]['timestamp'], G.nodes[node_4]['timestamp']) :
+                  # Vérification si node_1 et node_4 ne sont pas des descendants,	NB:  medem 1 w 4 ne sont pas descendant donc new_node_1 et new_node_2 mich bech ikounou desecndants
+                  descendants_1 = nx.descendants(G, node_1)
+                  descendants_1.add(node_1)
+                  descendants_3 = nx.descendants(G, node_3)
+                  descendants_3.add(node_3)
+                  if (node_1 not in descendants_3 and node_3 not in descendants_1) :
 
-                node_1, node_2 = random_edge_1
-                node_3, node_4 = random_edge_2
+                    # Assurer que node_1 (parent de new_node_1) ne soit pas un descendant de px (parent de x) et que node_2(parent de new_node_2) ne soit pas un descendant de py (parent de y), et vice versa
+                    descendants_x = set()
+                    descendants_y = set()
+                    px = next(G.predecessors(x)) # Récupère le premier prédécesseur direct (parent) du nœud x. Note : puisque nous travaillons avec un arbre, il n'y a qu'un seul prédécesseur direct.)
+                    py = next(G.predecessors(y)) # Récupère le premier prédécesseur direct (parent) du nœud y.
+                    descendants_x = set(nx.descendants(G, x)) | {x, px}   #RQ: Ajoute également les nœuds x et px à cet ensemble : " | {x, px}"
+                    descendants_y = set(nx.descendants(G, y)) | {y, py}
+                    if (node_1 not in descendants_x and node_3 not in descendants_y) and \
+                      (node_3 not in descendants_x and node_1 not in descendants_y):
 
-                # Variables pour garder une trace des anciens nœuds
-                number_node_1= G.nodes[node_1]['number']
-                number_node_2= G.nodes[node_2]['number']
-                number_node_3= G.nodes[node_3]['number']
-                number_node_4= G.nodes[node_4]['number']
+                      L.add(edge)
+            # Si aucune arête de transfert valide n'est trouvée, passez à l'itération suivante.
+            if not L:
+                continue
 
-                timeStamp_node_1= G.nodes[node_1]['timestamp']
-                timeStamp_node_2= G.nodes[node_2]['timestamp']
-                timeStamp_node_3= G.nodes[node_3]['timestamp']
-                timeStamp_node_4= G.nodes[node_4]['timestamp']
+            # 3) choisir une arête e' au hasard parmi L
+            random_edge_2 = random.choice(list(L))
+            node_3, node_4 = random_edge_2
 
-                # Suppression des arêtes choisies
-                G.remove_edge(node_1, node_2)
-                G.remove_edge(node_3, node_4)
-
-                # Ajout des nouveaux nœuds et des arêtes
-                new_node_1 = max(G.nodes()) + 1
-                new_node_2 = max(G.nodes()) + 2
-
-                G.add_edge(node_1, new_node_1, type='support', color='black')
-                G.add_edge(new_node_1, node_2, type='support', color='black')
-                G.add_edge(node_3, new_node_2, type='support', color='black')
-                G.add_edge(new_node_2, node_4, type='support', color='black')
-
-                G.nodes[new_node_1]['type']='network'
-                G.nodes[new_node_2]['type']='network'
-
-                # Vérification si aucun nœud n'est un descendant de l'autre
-                descendants_1 = nx.descendants(G, new_node_1)
-                descendants_2 = nx.descendants(G, new_node_2)
-
-                # Calcul du mean_timestamp
-                timestamp_manager = TimestampManager()
-                mean_timestamp = timestamp_manager.calculate_mean_timestamp(G, node_1, node_2, node_3, node_4)
-
-
-                descendants_x = set()
-                descendants_y = set()
-                px = next(G.predecessors(x)) # Récupère le premier prédécesseur direct (parent) du nœud x. Note : puisque nous travaillons avec un arbre, il n'y a qu'un seul prédécesseur direct.)
-                py = next(G.predecessors(y)) # Récupère le premier prédécesseur direct (parent) du nœud y.
-                descendants_x = set(nx.descendants(G, x)) | {x, px}   #RQ: Ajoute également les nœuds x et px à cet ensemble : " | {x, px}"
-                descendants_y = set(nx.descendants(G, y)) | {y, py}
-
-
-                # Vérification des conditions pour ajouter les nœuds:
-                  # Les nœuds ne sont pas en relation de descendance l'un de l'autre et respectent les conditions relatives aux timestamps
-                  # Assurer que new_node_1 ne soit pas un descendant de px (parent de x) et que new_node_2 ne soit pas un descendant de py (parent de y), et vice versa
-                if (new_node_1 not in descendants_2 and new_node_2 not in descendants_1) and \
-                  timestamp_manager.check_intersection(G.nodes[node_1]['timestamp'], G.nodes[node_2]['timestamp'],
-                                      G.nodes[node_3]['timestamp'], G.nodes[node_4]['timestamp']) and \
-                  mean_timestamp not in timestamps and \
-                  (new_node_1 not in descendants_x and new_node_2 not in descendants_y) and \
-                  (new_node_2 not in descendants_x and new_node_1 not in descendants_y):
-
-                    # Ajout de la nouvelle arête entre les deux nouveaux nœuds
-                    G.add_edge(new_node_1, new_node_2, type='transfer', color='red')
-
-
-                    # timestamp des nouveaux noeuds= Moyenne de l'intervalle [max(timestamp de node_1 , timestamp de node_3) , min(timestamp de node_2 , timestamp de node_4)]
-                    # Mise à jour des timestamps des nouveaux nœuds
-                    G.nodes[new_node_1]['timestamp']=mean_timestamp
-                    G.nodes[new_node_2]['timestamp']=mean_timestamp
-
-                    # Ajout du mean_timestamp à l'ensemble des timestamps
-                    timestamps.add(mean_timestamp)
-
-                    # Ajout des attributs "number" pour les nouveaux nœuds
-                    max_number = max(nx.get_node_attributes(G, "number").values()) + 1
-                    G.nodes[new_node_1]["number"] = max_number
-                    G.nodes[new_node_2]["number"] = max_number + 1
-
-                    # Si les conditions pour ajouter les nœuds sont vérifiée
-                    found = True
-                else:
-                    # Suppression des nouveaux nœuds ajoutés et restauration des anciens nœuds et arêtes à leur emplacement initial.
-                    G.remove_node(new_node_1)
-                    G.remove_node(new_node_2)
-                    G.add_edge(node_1, node_2, type='support', color='black')
-                    G.add_edge(node_3, node_4, type='support', color='black')
-                    G.nodes[node_1]['number']=number_node_1
-                    G.nodes[node_2]['number']=number_node_2
-                    G.nodes[node_3]['number']=number_node_3
-                    G.nodes[node_4]['number']=number_node_4
-
-                    G.nodes[node_1]['timestamp']=timeStamp_node_1
-                    G.nodes[node_2]['timestamp']=timeStamp_node_2
-                    G.nodes[node_3]['timestamp']=timeStamp_node_3
-                    G.nodes[node_4]['timestamp']=timeStamp_node_4
-
+            # 4) appeler add_transfer_to_tree en passant e et e'
+            transfer_manager = TransferManager()
+            G, new_node_1, new_node_2, max_node_value =transfer_manager.add_transfer_to_tree(G, node_1, node_2, node_3, node_4, -2, max_node_value)
 
         return G
 
 
-
-    def determine_transfers(self, G):
-        """
-            Détermine chaque transfert dans le graphe G en considérant les arêtes de support.
-
-            Args:
-                G (networkx.DiGraph): Le graphe NetworkX contenant les nœuds et les arêtes.
-
-            Returns:
-                list: Une liste de tuples, chaque tuple contient deux ensembles. Le premier ensemble représente les feuilles
-                      atteignables par le nœud de départ du transfert (en utilisant les arêtes de support), et le deuxième ensemble
-                      représente les feuilles atteignables par le nœud d'arrivée du transfert (en utilisant les arêtes de support).
-        """
-        transfers = []
-
-        for source_node, target_node, data in G.edges(data=True):
-            if data.get('type') == 'transfer':
-                source_leaves = set()
-                target_leaves = set()
-
-                # Parcours en profondeur pour trouver les feuilles atteignables par le nœud de départ du transfert (en utilisant les arêtes de support)
-                for leaf in nx.descendants(G, source_node):
-                    if G.out_degree(leaf) == 0 and nx.has_path(G, source_node, leaf):
-                        for path in nx.edge_disjoint_paths(G, source_node, leaf):
-                            edges = list(zip(path, path[1:]))
-                            if all(G.edges[u, v]['type'] == 'support' for u, v in edges):
-                                source_leaves.add(leaf)
-
-                # Parcours en profondeur pour trouver les feuilles atteignables par le nœud d'arrivée du transfert (en utilisant les arêtes de support)
-                for leaf in nx.descendants(G, target_node):
-                    if G.out_degree(leaf) == 0 and nx.has_path(G, target_node, leaf):
-                        for path in nx.edge_disjoint_paths(G, target_node, leaf):
-                            edges = list(zip(path, path[1:]))
-                            if all(G.edges[u, v]['type'] == 'support' for u, v in edges):
-                                target_leaves.add(leaf)
-
-                transfers.append(((source_node, target_node), source_leaves, target_leaves))
-
-        return transfers
-
-
-
-    def is_PTN(self, G, attributes_eliminate, nbrCaractere):
+    def is_PTN_after_edge_removal(self, G, attributes_eliminate, nbrCaractere):
         """
           Vérifie si le graphe reste un réseau phylogénétique (PTN) après la suppression d'une arêtes.
 
@@ -467,7 +343,7 @@ class TransferManager:
         # Liste des caractères à vérifier
         C = [f'c{i+1}' for i in range(nbrCaractere)]
         tree_networks = TreeBasedNetworks()
-        attributes_eliminate = tree_networks.findLabeling(G, attributes_eliminate, C)
+        attributes_eliminate = tree_networks.findLabelingSilent(G, attributes_eliminate, C)
         print("attributes_eliminate : ",attributes_eliminate)
         # Si le résultat "attributes_eliminate" est None, cela signifie que l'étiquetage n'est pas possible, donc le graphe n'est pas un PTN
         return attributes_eliminate is not None
@@ -492,6 +368,7 @@ class TransferManager:
           # Comparaison des arêtes "transfer" en utilisant le timestamp de leurs nœuds
           u, v = edge
           return G.nodes[u]['timestamp'] - G.nodes[v]['timestamp']
+
 
         eliminated_edges_count = 0
         is_PTN_graph = True  # Initialiser la variable booléenne à True
@@ -521,14 +398,22 @@ class TransferManager:
                 print("u: ",G.nodes[u]["number"],"w: ",G.nodes[w]["number"])
 
                 # Assumer qu'il y a un seul prédécesseur et un seul successeur pour u et w
+                  # Vérifier qu'il y a exactement un prédécesseur et un successeur pour u et w
+                if len(predecessors_u) != 1 or len(successors_u) != 1 or len(predecessors_w) != 1 or len(successors_w) != 1:
+                    # Générer un avertissement pour signaler le problème
+                    import warnings
+                    warnings.warn("Le nombre de prédécesseurs ou successeurs pour u et w n'est pas conforme à l'attente.")
+
                 parent_u, child_u = predecessors_u[0], successors_u[0]
                 parent_w, child_w = predecessors_w[0], successors_w[0]
 
-                # Ajoutez une nouvelle arête entre le parent du nœud u et l'enfant du nœud w
+                # Ajoutez une nouvelle arête entre le parent du nœud u et l'enfant du nœud u
                 G.add_edge(parent_u, child_u, type='support', color='black')
 
-                # Ajoutez une nouvelle arête entre le parent du nœud w et l'enfant du nœud u
+                # Ajoutez une nouvelle arête entre le parent du nœud w et l'enfant du nœud w
                 G.add_edge(parent_w, child_w, type='support', color='black')
+
+                ch= G[u][w]['character']
 
                 G.remove_edge(*edge_to_remove)
 
@@ -540,6 +425,7 @@ class TransferManager:
                 timeStamp_w = G.nodes[w]['timestamp']
                 number_u=G.nodes[u]['number']
                 number_w=G.nodes[w]['number']
+
                 G.remove_node(u)
                 G.remove_node(w)
 
@@ -550,7 +436,7 @@ class TransferManager:
                 attributes_eliminate = labeler.set_leaf_attributes(G, nbrCaractere) # sans les deux noeuds de TR, contient etiquetage des feuilles seulements
 
 
-                if not transfer_manager.is_PTN(G, attributes_eliminate, nbrCaractere):  # Non PTN à partir de de l"elimination de la derniere arete
+                if not transfer_manager.is_PTN_after_edge_removal(G, attributes_eliminate, nbrCaractere):  # Non PTN à partir de de l"elimination de la derniere arete
 
                   #remettre tous dans le cas Non_PTN
                   eliminated_edges_count -= 1
@@ -561,10 +447,12 @@ class TransferManager:
                   G.remove_edge(parent_u, child_u)
                   G.remove_edge(parent_w, child_w)
                   # remettre les arete avec u et w
-                  G.add_edge(parent_u, u, type='transfer', color='red')
-                  G.add_edge(u, child_u, type='transfer', color='red')
-                  G.add_edge(parent_w, w, type='transfer', color='red')
-                  G.add_edge(w, child_w, type='transfer', color='red')
+                  G.add_edge(parent_u, u, type='support', color='black')
+                  G.add_edge(u, child_u, type='support', color='black')
+                  G.add_edge(parent_w, w, type='support', color='black')
+                  G.add_edge(w, child_w, type='support', color='black')
+                  G.add_edge(u, w, type='transfer', color='red')
+                  G[u][w]['character']= ch
                   G.nodes[u]['number']=number_u
                   G.nodes[w]['number']=number_w
                   G.nodes[u]['timestamp']=timeStamp_u
@@ -572,120 +460,11 @@ class TransferManager:
                   # on revient à la derniere etiquetage possible
                   attributes_eliminate= attributes_av
 
-                  break  # Sortir de la boucle for si le graphe n'est plus un PTN
+                  #break  # Sortir de la boucle for si le graphe n'est plus un PTN
 
                 print(attributes_eliminate)
 
         return G, attributes_eliminate
-
-
-
-
-    def eliminate_transfer_edges_random(self, G, attributes, nbrCaractere):
-        """
-              Cette fonction permet d'eliminer les arêtes qui sont potentiellement dispensables dans le réseau phylogénétique,
-              de sorte que si ces arêtes sont éliminées, le graphe résultant reste un Phylogenetic Network (PTN).
-
-              1- Trie les arêtes de transfert en fonction des timestamps de leurs nœuds.
-              2- Parcours les arêtes de transfert en mélangeant à chaque fois, d'une façon alétoire, la liste d'arêtes et les élimine progressivement, en vérifiant à chaque étape si le graphe résultant reste un PTN.
-              3- Si l'élimination d'une arête de transfert conduit à un graphe qui n'est pas un PTN, la dernière élimination est annulée pour rétablir l'état précédent.
-              4- La fonction retourne le graphe modifié ainsi que les attributs des nœuds mis à jour après les éliminations d'arêtes.
-
-              Args:
-                  G (networkx.DiGraph): Le graphe NetworkX contenant les nœuds et les arêtes.
-                  attributes (dict): Un dictionnaire contenant les attributs des nœuds du réseau G.
-                  nbrCaractere (int): Le nombre de caractères utilisés pour l'étiquetage des nœuds.
-
-              Returns:
-                  G (networkx.DiGraph): Le graphe modifié après les éliminations d'arêtes.
-                  dict: Les attributs mis à jour des nœuds après les éliminations d'arêtes.
-          """
-        eliminated_edges_count = 0
-        is_PTN_graph = True  # Initialiser la variable booléenne à True
-        attributes_eliminate= attributes
-        while is_PTN_graph:  # Boucle while utilisant la variable booléenne : permet de continuer tant que le graphe est considéré comme un PTN (c'est-à-dire que is_PTN_graph est True)
-
-
-            transfer_edges = [(u, v) for u, v, data in G.edges(data=True) if data.get('type') == 'transfer']
-
-            if not transfer_edges:
-                # S'il n'y a plus d'arêtes "transfer", on arrête
-                print("il n'y a plus d'arêtes 'transfer'")
-                break
-
-            # Mélanger aléatoirement la liste des edges de type 'transfer' pour avoir un ordre aléatoire
-            random.shuffle(transfer_edges)
-
-            for edge_to_remove in transfer_edges:
-                # Supprimez une arête de type "transfer" du graphe
-                u, w = edge_to_remove
-
-                # Trouver les prédécesseurs et les successeurs de u et w qui ont le type 'support'
-                predecessors_u = [pred for pred in G.predecessors(u) if G.edges[pred, u]['type'] == 'support']
-                successors_u = [succ for succ in G.successors(u) if G.edges[u, succ]['type'] == 'support']
-                predecessors_w = [pred for pred in G.predecessors(w) if G.edges[pred, w]['type'] == 'support']
-                successors_w = [succ for succ in G.successors(w) if G.edges[w, succ]['type'] == 'support']
-
-                print("u: ",G.nodes[u]["number"],"w: ",G.nodes[w]["number"])
-
-                # Assumer qu'il y a un seul prédécesseur et un seul successeur pour u et w
-                parent_u, child_u = predecessors_u[0], successors_u[0]
-                parent_w, child_w = predecessors_w[0], successors_w[0]
-
-                print("parent_u: ",G.nodes[parent_u]["number"],"child_u: ",G.nodes[child_u]["number"])
-                print("parent_w: ",G.nodes[parent_w]["number"],"child_w: ",G.nodes[child_w]["number"])
-
-                # Ajoutez une nouvelle arête entre le parent du nœud u et l'enfant du nœud w
-                G.add_edge(parent_u, child_u, type='support', color='black')
-
-                # Ajoutez une nouvelle arête entre le parent du nœud w et l'enfant du nœud u
-                G.add_edge(parent_w, child_w, type='support', color='black')
-
-                G.remove_edge(*edge_to_remove)
-
-                eliminated_edges_count += 1
-
-                timeStamp_u = G.nodes[u]['timestamp']
-                timeStamp_w = G.nodes[w]['timestamp']
-                number_u=G.nodes[u]['number']
-                number_w=G.nodes[w]['number']
-                G.remove_node(u)
-                G.remove_node(w)
-
-
-                labeler = LeafLabeler()
-                attributes_av= attributes_eliminate
-                # Mettre à jour la liste attribute
-                attributes_eliminate = labeler.set_leaf_attributes(G, nbrCaractere)
-
-                transfer_manager = TransferManager()
-                if not transfer_manager.is_PTN(G, attributes_eliminate, nbrCaractere):
-
-                  #remettre tous dans le cas Non_PTN
-                  eliminated_edges_count -= 1
-                  print("eliminated_edges_count: ", eliminated_edges_count)
-                  is_PTN_graph = False  # Mettre la variable à False pour sortir de la boucle while
-
-                  # eliminer les nouvelles aretes "supprot"
-                  G.remove_edge(parent_u, child_u)
-                  G.remove_edge(parent_w, child_w)
-                  # remettre les arete avec u et w
-                  G.add_edge(parent_u, u, type='transfer', color='red')
-                  G.add_edge(u, child_u, type='transfer', color='red')
-                  G.add_edge(parent_w, w, type='transfer', color='red')
-                  G.add_edge(w, child_w, type='transfer', color='red')
-                  G.nodes[u]['number']=number_u
-                  G.nodes[w]['number']=number_w
-                  G.nodes[u]['timestamp']=timeStamp_u
-                  G.nodes[w]['timestamp']=timeStamp_w
-                  # on revient à la derniere etiquetage possible
-                  attributes_eliminate= attributes_av
-
-                  break  # Sortir de la boucle for si le graphe n'est plus un PTN
-
-                print(attributes_eliminate)
-
-        return G, attributes_eliminate, eliminated_edges_count
 
 
 class TimestampManager:
@@ -836,10 +615,17 @@ class TreeBuilder:
 
         return G, root_id
 
-    def initialize_graph(self, G,nbrCaractere): #TreeBuilder
+    def initialize_graph(self, G, nbrCaractere, initialize_leaves=True):
         """
             Cette fonction initialise les attributs du graphe pour l'analyse phylogénétique en parcourant
-            tous les nœuds et arêtes du graphe et en ajoutant les attributs nécessaires.
+            tous les nœuds et arêtes du graphe et en ajoutant les attributs nécessaires. Elle initialise
+            les attributs suivants :
+
+            - "number" : Le numéro unique de chaque nœud dans le graphe.
+            - "timestamp" : Un timestamp initialisé à 0 pour tous les nœuds.
+            - "type" : Un type initialisé à une chaîne vide ('tree') pour tous les nœuds.
+            - "label" : Une liste de None de longueur nbrCaractere initialement attribuée uniquement aux feuilles
+               de l'arbre, sauf si initialize_leaves est spécifiquement défini sur False lors de l'appel à la fonction.
 
             Args:
                 G (networkx.DiGraph): Le graphe NetworkX représentant l'arbre phylogénétique.
@@ -858,42 +644,13 @@ class TreeBuilder:
             # Initialisation de l'attribut "type" à 'tree' pour tous les nœuds
             node["type"] = ''      #node["type"] = 'tree'
 
-        # Initialisation de l'attribut "label" à None pour les feuilles uniquement
-        feuilles = {node for node in G.nodes() if G.out_degree(node) == 0}
-        for leaf in feuilles:
-            G.nodes[leaf]["label"] = [None] * nbrCaractere
+        # Initialisation de l'attribut "label" à None pour les feuilles si l'option est activée
+        if initialize_leaves:
+            feuilles = {node for node in G.nodes() if G.out_degree(node) == 0}
+            for leaf in feuilles:
+                G.nodes[leaf]["label"] = [None] * nbrCaractere
 
         # Parcours de toutes les arêtes de l'arbre
-        for u, v in G.edges():
-            G.edges[u, v]['type'] = 'support'
-            G.edges[u, v]['color'] = 'black'
-
-        return G
-
-    def initialize_graph_without_leaf_label(self, G, nbrCaractere):
-        """
-            Cette fonction initialise les attributs du graphe pour l'analyse phylogénétique en parcourant
-            tous les nœuds et arêtes du graphe et en ajoutant les attributs nécessaires, sauf l'attribut "label"
-            qui ne sera pas initialisé pour les feuilles.
-
-            Args:
-                G (networkx.DiGraph): Le graphe NetworkX représentant l'arbre phylogénétique.
-                nbrCaractere (int): Le nombre de caractères pour l'analyse phylogénétique.
-
-            Returns:
-                G (networkx.DiGraph): Le graphe NetworkX initialisé avec les attributs nécessaires (sans "label" pour les feuilles).
-        """
-
-        # Parcours de tous les nœuds de l'arbre
-        for i, (node_id, node) in enumerate(G.nodes(data=True), start=1):
-            # Ajout du numéro du nœud comme attribut
-            node["number"] = i
-            # Initialisation de l'attribut "timestamp" à 0 pour tous les nœuds
-            node["timestamp"] = 0
-            # Initialisation de l'attribut "type" à 'tree' pour tous les nœuds
-            node["type"] = 'tree'
-
-        # Parcours de toutes les arêtes du graphe
         for u, v in G.edges():
             G.edges[u, v]['type'] = 'support'
             G.edges[u, v]['color'] = 'black'
@@ -1018,7 +775,7 @@ class LeafLabeler:
               children = list(G.successors(node))
 
               # Cas où la racine n'a qu'un seul enfant
-              if len(children) == 1 and G.in_degree(node) == 0:
+              if len(children) == 1 : # and G.in_degree(node) == 0
                   child_label = attributes[G.nodes[children[0]]["number"]]['Characters']
                   attributes[G.nodes[node]["number"]]['Characters'] = child_label
 
@@ -1055,8 +812,11 @@ class LeafLabeler:
             # Si le nœud possède le caractère c
             if attributes[G.nodes[node]["number"]]['Characters'][c]== 1:
 
-              # Déterminer le parent direct de notre nœud (NB: en travaille sur l'arbre G)
-              parent = list(G.predecessors(node))[0]
+              # Déterminer le parent direct de notre nœud
+              for predecessor in G.predecessors(node):
+                if G.edges[predecessor, node]['type'] == 'support':
+                    parent = predecessor
+                    break
               #  Vérifier si le parent du nœud ne contient pas le caractère
               if attributes[G.nodes[parent]["number"]]['Characters'][c] == 0:
                   # Si le nœud est une feuille, ajouter le nœud à l'ensemble Ac sans vérification des descendants
@@ -1088,7 +848,7 @@ class LeafLabeler:
               print(f"Feuille {G.nodes[node]['number']}: {label}")
 
 
-    def label_leaves_PTN(self, G, nbrCaractere):
+    def label_leaves_for_PTN_solution(self, G, nbrCaractere):
       """
           Étiquetage des feuilles du réseau G pour qu'il avoir une solution PTN.
 
@@ -1316,11 +1076,45 @@ class LeafLabeler:
 
         for leaf in species.nodes():
             if species.out_degree(leaf) == 0:
-                kegg_id = species.nodes[leaf]['kegg_id']
-                label = dic.get(kegg_id, "")[:nbrCaractere]
+                specie = species.nodes[leaf]['species']
+                label = dic.get(specie, "")[:nbrCaractere]
                 species.nodes[leaf]["label"] = label
 
         return species
+
+
+    def label_new_nodes_Greedy(self, G, attributes, new_node_1, new_node_2, pw, w, pay, ay, c):
+        """
+        Étiquette les nouveaux nœuds créés après l'ajout d'un transfert au graphe.
+
+        Args:
+            G (networkx.DiGraph): Le graphe NetworkX contenant les nœuds et les arêtes.
+            attributes (dict): Dictionnaire contenant les attributs des nœuds de l'arbre.
+            new_node_1 (int): Identifiant du premier nouveau nœud.
+            new_node_2 (int): Identifiant du deuxième nouveau nœud.
+            pw (int): L'identifiant du nœud parent direct de w.
+            w (int): L'identifiant du nœud w.
+            pay (int): L'identifiant du nœud parent direct de ay.
+            ay (int): L'identifiant du nœud ay.
+            c (int): Le caractère à ajouter lors du transfert.
+        """
+        # Étiquetage des nouveaux nœuds
+
+        #l( ˆ w) = (l(w) ∩ l(w′)
+        Characters_new_node_1 = [a & b for a, b in zip(attributes[G.nodes[w]["number"]]['Characters'], attributes[G.nodes[pw]["number"]]['Characters'])]
+        # (l(ˆ ai+1) = l(a′ i+1) ∩ l(ai+1))
+        Characters_new_node_2 = [a & b for a, b in zip(attributes[G.nodes[ay]["number"]]['Characters'], attributes[G.nodes[pay]["number"]]['Characters'])]
+
+        # Ajout des nouvelles étiquettes de caractères aux nœuds nouvellement créés
+        attributes[G.nodes[new_node_1]["number"]] = {'Characters': Characters_new_node_1, 'spece': None}
+        attributes[G.nodes[new_node_2]["number"]] = {'Characters': Characters_new_node_2, 'spece': None}
+
+        # Ajout du caractère c aux étiquettes de caractères des nouveaux nœuds
+        # l( ˆ w) = (l(w) ∩ l(w′)) ∪ {c}  et  (l(ˆ ai+1) = l(a′ i+1) ∩ l(ai+1)) ∪ {c}
+        c_list = [1 if i == c else 0 for i in range(len(attributes[G.nodes[pw]["number"]]['Characters']))]
+        attributes[G.nodes[new_node_1]["number"]]['Characters'] = [a | b for a, b in zip(attributes[G.nodes[new_node_1]["number"]]['Characters'], c_list)]
+        attributes[G.nodes[new_node_2]["number"]]['Characters'] = [a | b for a, b in zip(attributes[G.nodes[new_node_2]["number"]]['Characters'], c_list)]
+
 
 
 
@@ -1464,7 +1258,78 @@ class TreeBasedNetworks:
 
         return l
 
+    def findLabelingSilent(self, G, attributes, C):
+        """
+            Résout le problème de reconnaissance d'évolution de Phylogenetic Network (PTN).
 
+            Le but est de trouver un étiquetage pour les nœuds internes du réseau arborescent G
+            qui explique correctement l'évolution d'un ensemble donné d'espèces spécifié par l'ensemble
+            de taxons S et les caractères C.
+
+            Args:
+                G (networkx.DiGraph): Le graphe NetworkX représentant le réseau arborescent G avec les nœuds et les arêtes.
+                attributes (dict): Un dictionnaire contenant les attributs des nœuds du réseau G. Il doit contenir les caractères
+                                  étiquetant les nœuds internes du réseau.
+                C (list): Une liste de caractères C représentant l'ensemble des caractères disponibles
+                        pour l'étiquetage des nœuds internes du réseau G.
+
+            Returns:
+                dict or None: Un dictionnaire contenant les attributs mis à jour des nœuds du réseau G.
+                Les caractères des nœuds internes sont mis à jour en fonction de l'étiquetage trouvé pour
+                expliquer l'évolution des espèces spécifiée par l'ensemble de taxons S. Si aucun étiquetage
+                n'est possible, renvoie None.
+
+            Preconditions:
+                Les bords de support et de transfert du réseau G sont connus.
+        """
+
+        # Dessin du graphe G
+        plt.figure()
+        plt.title(f"Graphe G")
+        tree_builder = TreeBuilder()
+        tree_builder.drawGraph(G)
+
+        l = 1
+
+        # Vérification de la condition "l not NULL and C is not empty"
+        while l is not None and len(C) > 0:
+            # Sélection d'un caractère c dans C
+            c = C.pop()
+
+            # Calcule l'ensemble Fc pour le graphe G
+            tree_networks= TreeBasedNetworks()
+            Fc = tree_networks.compute_Fc(G, attributes, C)
+
+
+            # Création du graphe G^c pour le caractère c
+            Gc = G.copy()
+            Gc.remove_nodes_from(Fc)
+
+
+
+            # Si Gc est vide, on attribue la valeur 0 au caractère c pour tous les nœuds de G.
+            if len(Gc) == 0:
+              for n in G.nodes():
+                 attributes[G.nodes[n]["number"]]['Characters'][len(C)] = 0
+            else:
+              # Vérification de la connectivité faible du graphe G^c
+              is_connected = nx.is_weakly_connected(Gc)
+
+              # Si le graphe G^c n'est pas faiblement connecté, l'étiquetage n'est pas possible pour ce caractère c.
+              if not is_connected:
+                  print(f"Le graphe G\u0302{c} n'est pas faiblement connecté.")
+                  l = None
+                  print("l'étiquetage n'est pas possible")
+              # Si le graphe G^c est faiblement connecté, on essaie de trouver un étiquetage possible
+              else:
+                  leaflabeler=LeafLabeler()
+                  l= leaflabeler.possible_etiquetage(G, Gc, attributes, C, c)
+
+            print()
+            print(l)
+            print()
+
+        return l
 
     def TransferAdditionGreedy(self, G, attributes):
         """
@@ -1488,6 +1353,9 @@ class TreeBasedNetworks:
 
         # Nombre de caractères à analyser
         nbrCaractere = len(attributes[1]['Characters'])
+
+        # Déterminer le maximum de G.nodes()
+        max_node_value = max(G.nodes())
 
         # Parcours pour chaque caractère
         for c in range(nbrCaractere):
@@ -1568,7 +1436,10 @@ class TreeBasedNetworks:
                     timestamp_manager = TimestampManager()
                     if timestamp_manager.check_intersection(start_1, end_1, start_2, end_2):
                       # Il y a une intersection entre les intervalles, on va ajouter notre transfert
-                      G=transfer_manager.add_transfer_to_tree(G, pw, w, pay, ay, c, attributes) #13
+                      G, new_node_1, new_node_2, max_node_value =transfer_manager.add_transfer_to_tree(G, pw, w, pay, ay, c, max_node_value) #13
+
+                      # Appeler la fonction pour étiqueter les nouveaux nœuds
+                      labeler.label_new_nodes_Greedy(G, attributes, new_node_1, new_node_2, pw, w, pay, ay, c)
 
                       break # Si un seul transfert a été appliqué, on sort de la boucle For
 

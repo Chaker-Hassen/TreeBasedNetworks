@@ -13,12 +13,14 @@ files.upload()     # <================= Veuillez importer le fichier 'treebasedn
 
 pip install asymmetree
 
-files.upload() # <================= Veuillez importer le fichier 'test1_species_tree.pkl'
+files.upload() # <================= Veuillez importer le fichier 'inter_species_tree.pkl'
+
+"""On a la variable 'species' qui est censée représenter notre arbre phylogénétique avec 70 noeuds (dont 25 noeuds internes et le reste sont des feuilles) et 69 branches."""
 
 import pickle as pkl
 
 # Ouverture du fichier pickle 'test1_species_tree.pkl' en mode lecture binaire
-file1 = open('/content/test1_species_tree.pkl', 'rb')
+file1 = open('/content/inter_species_tree.pkl', 'rb')
 
 # Chargement des données du fichier pickle dans la variable 'species'
 species = pkl.load(file1)
@@ -26,12 +28,15 @@ species = pkl.load(file1)
 # Impression du contenu des données chargées (informations sur notre arbre)
 print(species)
 
-"""La variable 'species' qui est censée représenter notre arbre phylogénétique."""
+files.upload() # <================= Veuillez importer le fichier 'interphylum_matrix.pkl'
 
-files.upload() # <================= Veuillez importer le fichier 'test1_small_matrix.pkl'
+"""Ce dictionnaire contient nos 45 espèces choisies au hasard de la base de données d'Orthologie KEGG (Encyclopédie Kyoto des Gènes et des Génomes).
+
+Nous avons choisi 23 KOs en nous basant sur des caractéristiques qui ont amélioré les performances du modèle GCN.
+"""
 
 # Ouverture du fichier pickle 'test1_small_matrix.pkl' en mode lecture binaire
-file2 = open('/content/test1_small_matrix.pkl', 'rb')
+file2 = open('/content/interphylum_matrix.pkl', 'rb')
 
 # Chargement des données du fichier pickle dans la variable 'dic' (qui représente un dictionnaire)
 dic = pkl.load(file2)
@@ -41,6 +46,14 @@ print(dic)
 
 # Calcul et impression du nombre d'éléments dans le dictionnaire ( en principe egale au nbr des feuilles de notre arbre species)
 len(dic)
+
+"""On se basant sur l'algorithme 2 "Gluton", on va ajouter des transferts aux nœuds de notre arbre en fonction des attributs des nœuds afin de construire un Tree-Based Network PTN.
+
+La sortie de l'algorithme 2, "Tree-based Network species," est stockée dans un fichier pickle "output_algo2".
+
+=> Ce réseau présente un total de 528 arêtes, parmi lesquelles 459 ont été identifiées comme des transferts.
+
+"""
 
 from treebasednetworks import *
 
@@ -82,6 +95,8 @@ print(attributes)
 # Affichage du notre TBN species avec les nouvelles arêtes
 tree_builder.drawGraph(species)
 
+print(species)
+
 # Affichage des timestamps des tous les nœuds du graphe
 timestamp_manager.display_timestamps(species)
 
@@ -90,7 +105,7 @@ file2= open('output_algo2.pkl','wb')
 pkl.dump(species,file2)
 
 """
-**Valider les résultats de l'algorithme 2 en utilisant l'algorithme 1.**"""
+**Validation de la résultat de l'algorithme 2 en utilisant l'algorithme 1.**"""
 
 # Définition des attributs pour chaque nœud
 attributes = labeler.set_leaf_attributes(species,nbrCaractere)
@@ -113,13 +128,31 @@ print("\n-------------------------------------")
 # Affichage des timestamps des tous les nœuds du graphe
 timestamp_manager.display_timestamps(species)
 
-# G est le graphe mis à jour après l'ajout des transferts
-transfer_manager = TransferManager()
-transfers = transfer_manager.determine_transfers(species)
+"""--------------------------------------------------------------------------------
+# **inferred_HGT**
 
-# Affichage des résultats
-for transfer, source_leaves, target_leaves in transfers:
-    source_node, target_node = transfer
-    print(f"Transfert ({species.nodes[source_node]['number']}, {species.nodes[target_node]['number']}) ajputer caractere N°: {species.edges[source_node,target_node]['character']} :")
-    print("  Feuilles atteignables par le nœud de départ :", {species.nodes[node]['number'] for node in source_leaves})
-    print("  Feuilles atteignables par le nœud d'arrivée :", {species.nodes[node]['number'] for node in target_leaves})
+**- À partir du résultat de l'algorithme 2, Gluton "output_algo2," nous allons construire le graphe HGT inféré où chaque nœud représente une espèce et chaque arête représente un événement de transfert.**
+
+=> Nous avons identifié la présence de 412 arêtes et 45 nœuds dans le graphe "inferred_HGT_algo2".
+"""
+
+transfer_manager = TransferManager()
+G, Tr=transfer_manager.extract_reachable_leaves_graph(species)
+
+tree_builder.drawGraph(Tr)
+print(Tr)
+
+file3= open('inferred_HGT_algo2.pkl','wb')
+pkl.dump(Tr,file3)
+
+
+
+# Afficher les attributs des nœuds de Tr
+print("Attributs des nœuds de Tr:")
+for node, attributes in Tr.nodes(data=True):
+    print(f"Feuille {Tr.nodes[node]['number']} {node}: {attributes}")
+
+# Afficher les attributs des arêtes de Tr
+print("Attributs des arêtes de Tr:")
+for u, v, attributes in Tr.edges(data=True):
+    print(f"Arête ({Tr.nodes[u]['number']}, {Tr.nodes[v]['number']}) : {attributes}")

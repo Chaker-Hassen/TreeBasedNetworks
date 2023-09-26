@@ -20,12 +20,12 @@ def main():
     nbrCaractere = 3
 
     # Appel de la fonction build_graph_from_newick pour Construire l'arbre G à partir de la chaîne au format Newick
-    newick_string = "((5,4)2,(6,7)3)1;"
+    newick_string = "((3,4)2,(6,7)5)1;"
     tree_builder = TreeBuilder()
     G, root_id = tree_builder.build_graph_from_newick(newick_string)
 
     # Initialisation du l'arbre G
-    G = tree_builder.initialize_graph_without_leaf_label(G, nbrCaractere)
+    G = tree_builder.initialize_graph(G, nbrCaractere, initialize_leaves=False)
 
     # Ajouter des timestamps aux nœuds du G
     timestamp_manager = TimestampManager()
@@ -36,8 +36,8 @@ def main():
     G = transfer_manager.add_transfers_to_tree_PTN(G)
 
     labeler = LeafLabeler()
-    # Appel de la fonction label_leaves_PTN pour étiqueter les feuilles pour qu'il avoir une solution PTN
-    G = labeler.label_leaves_PTN(G, nbrCaractere)
+    # Appel de la fonction label_leaves_for_PTN_solution pour étiqueter les feuilles pour qu'il avoir une solution PTN
+    G = labeler.label_leaves_for_PTN_solution(G, nbrCaractere)
 
     # Affiche les étiquettes des feuilles du graphe
     labeler.display_leaf_labels(G)
@@ -56,6 +56,9 @@ def main():
     l = tree_networks.findLabeling(G, attributes, C)
 
     print("Valeur de l:", l)
+
+    # Afficher les horodatages
+    timestamp_manager.display_timestamps(G)
 
 if __name__ == "__main__":
     main()
